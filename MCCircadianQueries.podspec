@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.dependency 'SwiftyUserDefaults', '~> 3.0'
 
   s.ios.deployment_target = "9.0"
-  s.watchos.deployment_target = "2.0"
+  s.watchos.deployment_target = "3.0"
 
   s.source   = { :git => "https://github.com/twoolf/MCCircadianQueries.git", :tag => "0.2.1"}
   s.source_files = "MCCircadianQueries/Classes/*.swift"
