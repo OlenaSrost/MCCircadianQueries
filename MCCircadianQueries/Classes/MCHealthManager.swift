@@ -550,6 +550,7 @@ open class MCHealthManager: NSObject {
                     i += 1
                 } else {
                     statistics.append(transform(MCAggregateSample(startDate: date, endDate: date + delta, value: 0.0, sampleType: sampleType, op: aggOp)))
+
                 }
             }
             return statistics
@@ -888,7 +889,6 @@ open class MCHealthManager: NSObject {
                 }
             }
         }, completion: {object, isLoadedFromCache, error in
-            print ("if let aggArray = object {")
             if let aggArray = object {
                 self.queryResultAsSamples(.aggregatedSamples(aggArray.aggregates), error: error, completion: completion)
             } else {
@@ -1904,6 +1904,15 @@ public struct DateRange : Sequence {
         mutating public func next() -> Date? {
             if range.currentStep == 0 { range.currentStep += 1; return range.startDate }
             else {
+                if let nextDate = range.calendar.date(byAdding: .day, value: range.stepValue, to: range.startDate) {
+                    range.currentStep += 1
+                    if range.endDate <= nextDate {
+                        return nil
+                    } else {
+                        range.startDate = nextDate
+                        return nextDate
+                    }
+                }
                 return nil
             }
         }
