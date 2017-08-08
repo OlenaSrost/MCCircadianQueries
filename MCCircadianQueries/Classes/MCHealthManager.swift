@@ -1,3 +1,4 @@
+//fix for induvidual data
 //
 //  MCHealthManager.swift
 //  MCCircadianQueries
@@ -223,9 +224,10 @@ open class MCHealthManager: NSObject {
     // Completion handler is on background queue
     open func fetchSamplesOfType(_ sampleType: HKSampleType,
                                  predicate: NSPredicate? = nil,
-                                 limit: Int = noLimit,
+                                 limit: Int = 0,
                                  sortDescriptors: [NSSortDescriptor] = [dateAsc],
                                  completion: @escaping HMSampleBlock) {
+
         let query = HKSampleQuery(sampleType: sampleType,
                                   predicate: predicate,
                                   limit: limit,
@@ -265,15 +267,17 @@ open class MCHealthManager: NSObject {
         let group = DispatchGroup()
         var samples = [HKSampleType: [MCSample]]()
 
-        let updateSamples :  (@escaping (MCSampleArray, CacheExpiry) -> Void, @escaping (Error?) -> Void, HKSampleType, [MCSample], Error?) -> Void = {
+        let updateSamples :  (@escaping (MCSampleArray, CacheExpiry) -> Void, @escaping (NSError?) -> Void, HKSampleType, [MCSample], Error?) -> Void = {
             (success, failure, type, statistics, error) in
             guard error == nil else {
-                failure(error)
+                let err = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error?.localizedDescription])
+                failure(err)
                 return
             }
 
             guard statistics.isEmpty == false else {
-                failure(error)
+                let err = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error?.localizedDescription])
+                failure(err)
                 return
             }
 
@@ -281,11 +285,49 @@ open class MCHealthManager: NSObject {
             success(MCSampleArray(samples: statistics), .never)
         }
 
-        let onWorkout : (@escaping (MCSampleArray, CacheExpiry) -> Void, @escaping (Error?) -> Void, HKSampleType) -> Void = { (success, failure, type) in
-            self.fetchPreparationAndRecoveryWorkout(false) { (statistics, error) in
+        let onCatOrCorr = { (success, failure, type) in
+            self.fetchMostRecentSample(type) { (statistics, error) in
                 updateSamples(success, failure, type, statistics, error)
             }
         }
+
+
+        let onWorkout : (@escaping (MCSampleArray, CacheExpiry) -> Void, @escaping (NSError?) -> Void, HKSampleType) -> Void = { (success, failure, type) in
+            self.fetchPreparationAndRecoveryWorkout(false) { (statistics, error) in
+                // let err = Error(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error.localizedDescription])
+                updateSamples(success, failure, type, statistics, error)
+            }
+        }
+
+        let onStatistic : (@escaping (MCSampleArray, CacheExpiry) -> Void, @escaping (NSError?) -> Void, HKSampleType) -> Void = { (success, failure, type) in
+            // First run a pilot query to retrieve the acquisition date of the last sample.
+            self.fetchMostRecentSample(type) { (samples, error) in
+                guard error == nil else {
+                    //        log.error("Could not fetch recent samples for \(type.displayText): \(error!.localizedDescription)")
+                    let err = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error?.localizedDescription])
+                    failure(err)
+                    return
+                }
+
+                if let lastSample = samples.last {
+                    // Then run a statistics query to aggregate relative to the recent sample date.
+                    let recentWindowStartDate = lastSample.startDate - 4.days
+                    let predicate = HKSampleQuery.predicateForSamples(withStart: recentWindowStartDate, end: nil, options: [])
+                    self.fetchStatisticsOfType(type, predicate: predicate) { (statistics, error) in
+                        updateSamples(success, failure, type, statistics, error)
+                    }
+                } else {
+                    updateSamples(success, failure, type, samples, error)
+                }
+            }
+        }
+
+
+        let debugType = types[5]
+        var array = [HKSampleType]()
+        array.append(debugType)
+
+
 
         types.forEach { (type) -> () in
             group.enter()
@@ -293,13 +335,14 @@ open class MCHealthManager: NSObject {
             self.sampleCache.setObject(forKey:key,
                                        cacheBlock: { (success, failure) in
                                         if (type.identifier == HKCategoryTypeIdentifier.sleepAnalysis.rawValue) {
-                                            return
+                                            onCatOrCorr(success, failure, type)
                                         } else if (type.identifier == HKCorrelationTypeIdentifier.bloodPressure.rawValue) {
-                                            return
+                                            onCatOrCorr(success, failure, type)
                                         } else if (type.identifier == HKWorkoutTypeIdentifier) {
-                                            onWorkout(success, failure as! (Error?) -> Void, type)
-                                        } else {
                                             return
+                                                onWorkout(success, failure, type)
+                                        } else {
+                                            onStatistic(success, failure, type)
                                         }
             },
                                        completion: { (samplesCoding, cacheHit, error) in
