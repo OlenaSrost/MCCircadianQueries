@@ -183,10 +183,9 @@ open class MCHealthManager: NSObject {
             startDate = endDate - 1.weeks
 
         case .month:
-            // Retrieve a full 31 days worth of data, regardless of the month duration (e.g., 28/29/30/31 days)
             unit = .day
             endDate = endDate.startOf(component: .day) + 1.days
-            startDate = endDate - 32.days
+            startDate = endDate - 1.months
 
         case .year:
             unit = .month
