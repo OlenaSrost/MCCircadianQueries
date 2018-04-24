@@ -223,8 +223,8 @@ open class MCSampleCoding: NSObject, NSCoding, MCSample {
                 self.init(sample: sample!)
 
             case .aggregateCoding:
-                guard let aggregateCoding = aDecoder.decodeObject(forKey: MCSampleCoding.aggregateKey) as? MCAggregateSample.MCAggregateSampleCoding? else { return nil }
-                self.init(aggregate: aggregateCoding!.aggregate!)
+                guard let aggregateCoding = aDecoder.decodeObject(forKey: MCSampleCoding.aggregateKey) as? MCAggregateSample.MCAggregateSampleCoding?, let aggregate = aggregateCoding?.aggregate else { return nil }
+                self.init(aggregate: aggregate)
 
             case .rawCoding:
                 guard let start = aDecoder.decodeObject(forKey: MCSampleCoding.startKey) as? Date else { return nil }
@@ -483,7 +483,7 @@ public struct MCAggregateSample : MCSample {
 
 //@available(iOS 9.0, *)
 public extension MCAggregateSample {
-    public class MCAggregateSampleCoding: NSObject, NSCoding {
+    @objc(_TtCV18MCCircadianQueries17MCAggregateSample23MCAggregateSampleCoding) public class MCAggregateSampleCoding: NSObject, NSCoding {
 
         var aggregate: MCAggregateSample?
 
