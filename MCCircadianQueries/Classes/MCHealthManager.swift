@@ -1850,13 +1850,63 @@ open class MCHealthManager: NSObject {
         let sleepType = HKCategoryType.categoryType(forIdentifier: HKCategoryTypeIdentifier.sleepAnalysis)!
         let sleepPredicate = HKQuery.predicateForCategorySamples(with: .equalTo, value: HKCategoryValueSleepAnalysis.asleep.rawValue)
 
-        let _: [HKSampleType: NSPredicate] = [
-            HKWorkoutType.workoutType(): withSourcePredicate(circadianEventPredicates)
-            , sleepType: withSourcePredicate(sleepPredicate)
+        let typesAndPredicates: [HKSampleType: NSPredicate] = [
+            HKWorkoutType.workoutType(): withSourcePredicate(circadianEventPredicates),
+            sleepType: withSourcePredicate(sleepPredicate)
         ]
+        
+        self.deleteSamples(startDate, endDate: endDate, typesAndPredicates: typesAndPredicates) { (deleted, error) in
+            if error != nil {
+                //                log.error("Failed to delete samples on the device, HealthKit may potentially diverge from the server.")
+                //                log.error(error!.localizedDescription)
+            }
+            
+            self.invalidateCircadianCache(startDate, endDate: endDate)
+            completion(error)
+        }
     }
 
+    // MARK: - Removing samples from HealthKit
+    
+    public func deleteSamplesOfType(_ sampleType: HKSampleType, startDate: Date?, endDate: Date?, predicate: NSPredicate,
+                                    withCompletion completion: @escaping (_ success: Bool, _ count: Int, _ error: Error?) -> Void)
+    {
+        let predWithInterval =
+            startDate == nil && endDate == nil ?
+                predicate :
+                NSCompoundPredicate(andPredicateWithSubpredicates: [
+                    predicate, HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: HKQueryOptions())
+                    ])
 
+        self.healthKitStore.deleteObjects(of: sampleType, predicate: predWithInterval, withCompletion: completion)
+    }
+    
+    public func deleteSamples(_ startDate: Date? = nil, endDate: Date? = nil, typesAndPredicates: [HKSampleType: NSPredicate],
+                              completion: @escaping (_ deleted: Int, _ error: NSError?) -> Void)
+    {
+        let group = DispatchGroup()
+        var numDeleted = 0
+        
+        typesAndPredicates.forEach { (type, predicate) -> () in
+            group.enter()
+            self.deleteSamplesOfType(type, startDate: startDate, endDate: endDate, predicate: predicate) {
+                (success, count, error) in
+                guard success && error == nil else {
+//                    log.error("Could not delete samples for \(type.displayText)(\(success)): \(error)")
+                    group.leave()
+                    return
+                }
+                numDeleted += count
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: DispatchQueue.main) {
+            // TODO: partial error handling, i.e., when a subset of the desired types fail in their queries.
+            completion(numDeleted, nil)
+        }
+    }
+    
     // MARK: - Cache invalidation
     func invalidateCircadianCache(_ startDate: Date, endDate: Date) {
         let dateRange = DateRange(startDate: startDate.startOf(component: .day), endDate: endDate.endOf(component: .day), stepUnits: .day)
