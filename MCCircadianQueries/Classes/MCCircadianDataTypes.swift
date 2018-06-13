@@ -361,9 +361,9 @@ public struct MCAggregateSample : MCSample {
         self.runningAgg = runningAgg
         self.runningCnt = runningCnt
     }
-
+    
     public mutating func rsum(_ sample: MCSample) {
-        print("value for sample \(sample)")
+        //        print("value for sample \(sample)")
         if let amount = sample.numeralValue {   runningAgg[0] += amount
             runningCnt += 1 }
     }
@@ -497,24 +497,24 @@ public extension MCAggregateSample {
             guard let endDate      = aDecoder.decodeObject(forKey: "endDate")      as? Date         else { print("Failed to rebuild MCAggregateSample endDate"); aggregate = nil; super.init(); return nil }
             guard let numeralValue = aDecoder.decodeObject(forKey: "numeralValue") as? Double?        else { print("Failed to rebuild MCAggregateSample numeralValue"); aggregate = nil; super.init(); return nil }
             guard let hkType       = aDecoder.decodeObject(forKey: "hkType")       as? HKSampleType?  else { print("Failed to rebuild MCAggregateSample hkType"); aggregate = nil; super.init(); return nil }
-            guard let aggOp        = aDecoder.decodeObject(forKey: "aggOp")        as? UInt           else { print("Failed to rebuild MCAggregateSample aggOp"); aggregate = nil; super.init(); return nil }
             guard let runningAgg   = aDecoder.decodeObject(forKey: "runningAgg")   as? [Double]       else { print("Failed to rebuild MCAggregateSample runningAgg"); aggregate = nil; super.init(); return nil }
-            guard let runningCnt   = aDecoder.decodeObject(forKey: "runningCnt")   as? Int            else { print("Failed to rebuild MCAggregateSample runningCnt"); aggregate = nil; super.init(); return nil
-        }
-
+            
+            let runningCnt = aDecoder.decodeInteger(forKey: "runningCnt")
+            let aggOp      = UInt(aDecoder.decodeInteger(forKey: "aggOp"))
+            
             aggregate = MCAggregateSample(startDate: startDate, endDate: endDate, numeralValue: numeralValue, hkType: hkType,
                                           aggOp: HKStatisticsOptions(rawValue: aggOp), runningAgg: runningAgg, runningCnt: runningCnt)
-            print("aggregate is: \(aggregate))")
-
+            print("aggregate is: \(String(describing: aggregate)))")
+            
             super.init()
         }
-
+        
         open func encode(with aCoder: NSCoder) {
             aCoder.encode(aggregate!.startDate,      forKey: "startDate")
             aCoder.encode(aggregate!.endDate,        forKey: "endDate")
             aCoder.encode(aggregate!.numeralValue,   forKey: "numeralValue")
             aCoder.encode(aggregate!.hkType,         forKey: "hkType")
-            aCoder.encode(aggregate!.aggOp.rawValue, forKey: "aggOp")
+            aCoder.encode(Int(aggregate!.aggOp.rawValue), forKey: "aggOp")
             aCoder.encode(aggregate!.runningAgg,     forKey: "runningAgg")
             aCoder.encode(aggregate!.runningCnt,     forKey: "runningCnt")
         }
