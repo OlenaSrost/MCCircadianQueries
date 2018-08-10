@@ -10,6 +10,8 @@ Pod::Spec.new do |s|
   s.dependency 'AwesomeCache'
   s.dependency 'SwiftDate'
   s.dependency 'SwiftyUserDefaults', '~> 3.0'
+  s.dependency 'Realm'
+  s.dependency 'RealmSwift'
 
   s.ios.deployment_target = "9.0"
   s.watchos.deployment_target = "3.0"
