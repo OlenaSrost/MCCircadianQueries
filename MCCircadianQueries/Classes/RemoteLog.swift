@@ -8,9 +8,9 @@
 
 
 import Foundation
-import Async
+//import Async
 //import LogKit
-import SwiftyUserDefaults
+//import SwiftyUserDefaults
 
 private let RLEnabledKey    = "RLEnabledKey"
 private let RLTokenKey      = "RLTokenKey"

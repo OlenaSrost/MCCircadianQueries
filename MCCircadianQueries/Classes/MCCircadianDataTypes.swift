@@ -1,6 +1,6 @@
 import Foundation
 import HealthKit
-import AwesomeCache
+//import AwesomeCache
 
 //let log = RemoteLog.sharedInstance
 
