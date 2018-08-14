@@ -68,7 +68,7 @@ public let LXFileEndpointRotationNextURLKey:          String = "info.logkit.endp
 
 
 /// The default file to use when logging: `log.txt`
-private let defaultLogFileURL: URL? = LK_DEFAULT_LOG_DIRECTORY?.appendingPathComponent("log.txt", isDirectory: false)
+public let defaultLogFileURL: URL? = LK_DEFAULT_LOG_DIRECTORY?.appendingPathComponent("log.txt", isDirectory: false)
 
 /// A private UTC-based calendar used in date comparisons.
 private let UTCCalendar: Calendar = {
@@ -85,7 +85,7 @@ private class LXLogFile {
     
     fileprivate let lockQueue: DispatchQueue = DispatchQueue(label: "logFile-Lock", attributes: [])
     fileprivate let handle: FileHandle
-    fileprivate var privateByteCounter: UIntMax?
+    fileprivate var privateByteCounter: UInt64?
     fileprivate var privateModificationTracker: TimeInterval?
     
     /// Clean up.
@@ -101,7 +101,7 @@ private class LXLogFile {
         self.handle = handle
         
         if appending {
-            self.privateByteCounter = UIntMax(self.handle.seekToEndOfFile())
+            self.privateByteCounter = UInt64(self.handle.seekToEndOfFile())
         } else {
             self.handle.truncateFile(atOffset: 0)
             self.privateByteCounter = 0
@@ -129,8 +129,8 @@ private class LXLogFile {
     }
     
     /// The size of this log file in bytes.
-    var sizeInBytes: UIntMax? {
-        var size: UIntMax?
+    var sizeInBytes: UInt64? {
+        var size: UInt64?
         self.lockQueue.sync(execute: { size = self.privateByteCounter })
         return size
     }
@@ -146,7 +146,7 @@ private class LXLogFile {
     func writeData(_ data: Data) {
         self.lockQueue.async(execute: {
             self.handle.write(data)
-            self.privateByteCounter = (self.privateByteCounter ?? 0) + UIntMax(data.count)
+            self.privateByteCounter = (self.privateByteCounter ?? 0) + UInt64(data.count)
             self.privateModificationTracker = CFAbsoluteTimeGetCurrent()
         })
     }
@@ -197,7 +197,7 @@ open class RotatingFileEndpoint: LXEndpoint {
     /// The base file name of the log files.
     fileprivate let baseFileName: String
     /// The maximum allowed file size in bytes. `nil` indicates no limit.
-    fileprivate let maxFileSizeBytes: UIntMax?
+    fileprivate let maxFileSizeBytes: UInt64?
     /// The number of files to include in the rotating set.
     fileprivate let numberOfFiles: UInt
     /// The index of the current file from the rotating set.
@@ -252,7 +252,7 @@ open class RotatingFileEndpoint: LXEndpoint {
         ) {
         self.dateFormatter = dateFormatter
         self.entryFormatter = entryFormatter
-        self.maxFileSizeBytes = maxFileSizeKiB == nil ? nil : UIntMax(maxFileSizeKiB!) * 1024
+        self.maxFileSizeBytes = maxFileSizeKiB == nil ? nil : UInt64(maxFileSizeKiB!) * 1024
         self.numberOfFiles = numberOfFiles
         //TODO: check file or directory to predict if file is accessible
         guard let dirURL = baseURL?.deletingLastPathComponent(), let filename = baseURL?.lastPathComponent else {
@@ -355,7 +355,7 @@ open class RotatingFileEndpoint: LXEndpoint {
     /// - returns: A boolean indicating whether a new log file should be selected.
     fileprivate func shouldRotateBeforeWritingDataWithLength(_ length: Int) -> Bool {
         switch (self.maxFileSizeBytes, self.currentFile?.sizeInBytes) {
-        case (.some(let maxSize), .some(let size)) where size + UIntMax(length) > maxSize: // Won't fit
+        case (.some(let maxSize), .some(let size)) where size + UInt64(length) > maxSize: // Won't fit
             fallthrough
         case (.some, .none):                                                               // Can't determine current size
             return true

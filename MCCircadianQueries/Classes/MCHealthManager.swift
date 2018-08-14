@@ -11,7 +11,6 @@ import Foundation
 import HealthKit
 import Async
 import SwiftDate
-import AwesomeCache
 import SwiftyUserDefaults
 
 
@@ -912,7 +911,7 @@ open class MCHealthManager: NSObject {
         aggregateCache.setObject(forKey:key, cacheBlock: { success, failure in
             print("aggregateCache.setObject")
 
-            let doCache : ( ([MCAggregateSample], Error?)) -> Void = {(aggregates, error) in
+            let doCache : ([MCAggregateSample], Error?) -> Void = { (aggregates, error) in
                 guard error == nil else {
                     print ("guard error == nil else")
                     failure(error as NSError?)
@@ -1387,7 +1386,7 @@ open class MCHealthManager: NSObject {
         if startDate == nil && endDate == nil {
             fetchAggregatedCircadianEvents(predicate: nil, aggregator: aggregator, initialAccum: initial, initialResult: [], final: final, completion: completion)
         } else {
-            fetchAggregatedCircadianEvents(Date.init() ?? Date.distantPast, endDate: endDate ?? Date(),
+            fetchAggregatedCircadianEvents(startDate, endDate: endDate,
                                            predicate: nil, aggregator: aggregator,
                                            initialAccum: initial, initialResult: [], final: final, completion: completion)
         }
@@ -1403,8 +1402,8 @@ open class MCHealthManager: NSObject {
         // iv. a dictionary of accumulated fasting intervals.
         typealias Accum = (Bool, Date?, Date?, [Date: Double])
 
-        let predicate : (Date, CircadianEvent) -> Bool = {
-            switch $0.1 {
+        let predicate : (Date, CircadianEvent) -> Bool = { (_, event) in
+            switch event {
             case .exercise, .fast, .sleep:
                 return true
             default:
@@ -1552,8 +1551,8 @@ open class MCHealthManager: NSObject {
     // This uses a one-pass variance/stddev calculation to finalize the resulting durations.
     open func fetchFastingVariability(_ startDate: Date, endDate: Date, aggUnit: Calendar.Component,
                                       completion: @escaping (_ variability: Double, _ error: Error?) -> Void) {
-        let predicate: ((Date, CircadianEvent) -> Bool) = {
-            switch $0.1 {
+        let predicate: ((Date, CircadianEvent) -> Bool) = { (_, event) in
+            switch event {
             case .exercise, .fast, .sleep:
                 return true
             default:
@@ -1564,7 +1563,7 @@ open class MCHealthManager: NSObject {
         let unitDuration : Double = durationOfCalendarUnitInSeconds(aggUnit)
         let truncateToAggUnit : (Double) -> Double = { return min($0, unitDuration) }
 
-        let group : (Date, CircadianEvent) -> Date = { return $0.0.startOf(component: aggUnit) }
+        let group : (Date, CircadianEvent) -> Date = { (date, _) in  return date.startOf(component: aggUnit) }
 
         fetchCircadianDurationsByGroup("FV", startDate: startDate, endDate: endDate, predicate: predicate, transform: truncateToAggUnit, groupBy: group) {
             (table, error) in
@@ -1604,8 +1603,8 @@ open class MCHealthManager: NSObject {
 
     // Returns total time spent fasting and non-fasting in the last week
     open func fetchWeeklyFastState(_ completion: @escaping (_ fast: Double, _ nonFast: Double, _ error: Error?) -> Void) {
-        let group : (Date, CircadianEvent) -> Int = { e in
-            switch e.1 {
+        let group : (Date, CircadianEvent) -> Int = { (_, event) in
+            switch event {
             case .exercise, .sleep, .fast:
                 return 0
 
@@ -1625,8 +1624,8 @@ open class MCHealthManager: NSObject {
 
     // Returns total time spent fasting while sleeping and fasting while awake in the last week
     open func fetchWeeklyFastType(_ completion: @escaping (_ fastSleep: Double, _ fastAwake: Double, _ error: Error?) -> Void) {
-        let predicate: ((Date, CircadianEvent) -> Bool) = {
-            switch $0.1 {
+        let predicate: ((Date, CircadianEvent) -> Bool) = { (_, event) in
+            switch event {
             case .exercise, .fast, .sleep:
                 return true
             default:
@@ -1634,8 +1633,8 @@ open class MCHealthManager: NSObject {
             }
         }
 
-        let group : (Date, CircadianEvent) -> Int = { e in
-            switch e.1 {
+        let group : (Date, CircadianEvent) -> Int = { (_, event) in
+            switch event {
             case .sleep:
                 return 0
             case .exercise, .fast:
@@ -1656,8 +1655,8 @@ open class MCHealthManager: NSObject {
 
     // Returns total time spent eating and exercising in the last week
     open func fetchWeeklyEatAndExercise(_ completion: @escaping (_ eatingTime: Double, _ exerciseTime: Double, _ error: Error?) -> Void) {
-        let predicate: ((Date, CircadianEvent) -> Bool) = {
-            switch $0.1 {
+        let predicate: ((Date, CircadianEvent) -> Bool) = { (_, event) in
+            switch event {
             case .exercise, .meal:
                 return true
             default:
@@ -1665,8 +1664,8 @@ open class MCHealthManager: NSObject {
             }
         }
 
-        let group : (Date, CircadianEvent) -> Int = { e in
-            switch e.1 {
+        let group : (Date, CircadianEvent) -> Int = { (_, event) in
+            switch event {
             case .meal:
                 return 0
             case .exercise:

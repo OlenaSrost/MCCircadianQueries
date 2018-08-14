@@ -8,9 +8,9 @@
 
 
 import Foundation
-//import Async
+import Async
 //import LogKit
-//import SwiftyUserDefaults
+import SwiftyUserDefaults
 
 private let RLEnabledKey    = "RLEnabledKey"
 private let RLTokenKey      = "RLTokenKey"
@@ -94,7 +94,7 @@ open class RemoteLog {
 
     open func loadURL(_ initial: Bool = false) {
         if Defaults.hasKey(RLTokenKey) {
-            if let s = Defaults.string(forKey: RLTokenKey), s.characters.count > 0 {
+            if let s = Defaults.string(forKey: RLTokenKey), s.count > 0 {
                 self.setURL(s, initial: initial)
             } else {
                 Defaults.remove(RLTokenKey)
@@ -104,7 +104,7 @@ open class RemoteLog {
     }
 
     open func setURL(_ token: String, initial: Bool = false) {
-        if token.characters.count > 0 {
+        if token.count > 0 {
             if let u = URL(string: "http://logs-01.loggly.com/inputs/\(token)/tag/http") {
                 Async.custom(queue: configQueue) {
                     if !initial {

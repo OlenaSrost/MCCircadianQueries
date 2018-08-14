@@ -16,31 +16,63 @@ public enum CacheExpiry {
 /// The easiest way to implement a subclass is to override `objectForKey` and `setObject:forKey:expires:`,
 /// e.g. to modify values prior to reading/writing to the cache.
 
-
-private let CurrentDBSchemaVersion: UInt64 = 10
-private lazy var realmDB: Realm = { _ throws -> Realm in
-    let migrationBlock: MigrationBlock = { migration, oldSchemaVersion in
-        //Leave the block empty
-    }
-    let fileURL = RLMRealmPathForFile("mc_cache.realm")
+private class DataSource {
+    static let shared = DataSource()
+    static let queue = DispatchQueue.main// DispatchQueue(label: "com.mc.cache.diskQueue", attributes: DispatchQueue.Attributes.concurrent)
     
-    Realm.Configuration.defaultConfiguration = Realm.Configuration(fileURL: fileURL, schemaVersion: CurrentDBSchemaVersion, migrationBlock: migrationBlock)
+    private let CurrentDBSchemaVersion: UInt64 = 1
+    private(set) var realmDB: Realm
     
-    do {
-        try Realm.performMigration()
-        return try Realm()
-    } catch let error {
-        throw error
+    init() {
+        let migrationBlock: MigrationBlock = { migration, oldSchemaVersion in
+            //Leave the block empty
+        }
+        
+        let fileURL = RLMRealmPathForFile("mc_cache.realm")
+        
+        Realm.Configuration.defaultConfiguration = Realm.Configuration(fileURL: URL(fileURLWithPath: fileURL), schemaVersion: CurrentDBSchemaVersion, migrationBlock: migrationBlock)
+        
+        try! Realm.performMigration()
+        realmDB = try! Realm()
     }
-}()
+    
+    class func runDBOperation(_ operation: @escaping (_ realmDB: Realm) -> Void) {
+        DataSource.queue.async(flags: .barrier, execute: {
+            operation(self.shared.realmDB)
+        })
+    }
+}
 
-open class Cache<T: NSCoding> {
+public protocol CachableObject: NSCoding {
+    
+}
+
+public class CacheConfigurations {
+    public class func configureCache() {
+        
+        let realmDB = DataSource.shared.realmDB
+        
+//        do {
+//            try realmDB.write {
+//                realmDB.deleteAll()
+//            }
+//        } catch {
+//            print(error.localizedDescription)
+//        }
+    }
+}
+
+open class Cache<T: CachableObject> {
     open let name: String
     open let cacheDirectory: URL
 
+    private var realmDB: Realm {
+        return DataSource.shared.realmDB
+    }
+    
     internal let cache = NSCache<NSString, InternalCacheObject>() // marked internal for testing
+    internal var localCache = [String: InternalCacheObject]()
     fileprivate let fileManager = FileManager()
-    fileprivate let queue = DispatchQueue(label: "com.mc.cache.diskQueue", attributes: DispatchQueue.Attributes.concurrent)
 
     /// Typealias to define the reusability in declaration of the closures.
     public typealias CacheBlockClosure = (T, CacheExpiry) -> Void
@@ -58,11 +90,10 @@ open class Cache<T: NSCoding> {
     ///                             adds the given value as an NSFileManager attribute.
     ///
     ///  - returns:	A new cache with the given name and directory
-    public init(name: String, directory: URL?, fileProtection: String? = nil) throws {
+    public init(name: String, directory: URL? = nil, fileProtection: String? = nil) throws {
         self.name = name
         cache.name = name
-        
-        _ = try realmDB
+        self.cacheDirectory = URL(fileURLWithPath: "")
     }
 
     /// Convenience Initializer
@@ -127,22 +158,39 @@ open class Cache<T: NSCoding> {
     open func object(forKey key: String, returnExpiredObjectIfPresent: Bool = false) -> T? {
         let ckey = objKey(with: key)
         
-        let predicate = NSPredicate(format: "key == \(ckey)")
-        let object: CacheObject? = realmDB.objects(CacheObject.self)
-                                    .first(where: { obj in (obj.key == ckey) })
-        
-        // Check if object is not already expired and return
-        if let object = object, !object.isExpired() || returnExpiredObjectIfPresent {
-            return object.getValue() as? T
+        if Thread.isMainThread {
+            let object: CacheObject? = realmDB.objects(CacheObject.self)
+                .first(where: { obj in (obj.key == ckey) })
+            
+            // Check if object is not already expired and return
+            if let object = object, !object.isExpired() || returnExpiredObjectIfPresent, let obj = object.getCacheValue() as? T {
+                return obj
+            }
+            
+            return nil
+        } else {
+            var result: T? = nil
+            DataSource.queue.sync {
+                //        let predicate = NSPredicate(format: "key == \(ckey)")
+                let object: CacheObject? = realmDB.objects(CacheObject.self)
+                    .first(where: { obj in (obj.key == ckey) })
+                
+                // Check if object is not already expired and return
+                if let object = object, !object.isExpired() || returnExpiredObjectIfPresent, let obj = object.getCacheValue() as? T {
+                    result = obj
+                }
+            }
+            
+            return result
         }
-
-        return nil
+        
+        
     }
 
     open func allObjects(includeExpired: Bool = false) -> [T] {
-        let cached: [CacheObject]? = try? realmDB.objects(CacheObject.self)
+        let cached: [CacheObject] = realmDB.objects(CacheObject.self)
             .filter { item in (item.key.hasPrefix(self.name)) }
-        let objects: [T] = cached?.flatMap { $0.getValue() } ?? []
+        let objects: [T] = cached.flatMap { $0.getCacheValue() as? T }
         return objects
     }
 
@@ -160,12 +208,11 @@ open class Cache<T: NSCoding> {
     /// - parameter forKey:	A key that represents this object in the cache
     /// - parameter expires: The CacheExpiry that indicates when the given object should be expired
     open func setObject(_ object: T, forKey key: String, expires: CacheExpiry = .never) {
-        let ckey = objKey(with: key)
         let expiryDate = expiryDateForCacheExpiry(expires)
         // TODO: add realm
-        queue.sync(flags: .barrier, execute: {
-            self.add(object, key: ckey, expiryDate: expiryDate)
-        }) 
+        DataSource.runDBOperation { realmDB in
+            self.add(object, key: key, expiryDate: expiryDate)
+        }
     }
 
     // MARK: Remove objects
@@ -175,51 +222,54 @@ open class Cache<T: NSCoding> {
     /// - parameter key: The key of the object that should be removed
     open func removeObject(forKey key: String) {
         let ckey = objKey(with: key)
-        queue.sync(flags: .barrier, execute: {
+        DataSource.runDBOperation { realmDB in
             do {
                 try realmDB.write {
-                    if let objectForRemove: CacheObject? = try? realmDB.objects(CacheObject.self)
-                        .first({ $0.key == ckey }) {
+                    
+                    if let objectForRemove = realmDB.objects(CacheObject.self)
+                        .first(where: { $0.key == ckey }) {
                         realmDB.delete(objectForRemove)
+                        self.localCache.removeValue(forKey: ckey)
                     }
                 }
             } catch { }
-        }) 
+        }
     }
 
     /// Removes all objects from the cache.
     open func removeAllObjects() {
         
         // TODO: add predicate
-        queue.sync(flags: .barrier, execute: {
+        DataSource.runDBOperation { realmDB in
             do {
                 try realmDB.write {
-                    let predicate = NSPredicate(format: "key BEGINSWITH \(self.name)")
-                    let objectsForRemove: [CacheObject] = realmDB.objects(CacheObject.self).filter(predicate)
+                    let objectsForRemove: [CacheObject] = realmDB.objects(CacheObject.self).filter({ object -> Bool in
+                        object.key.hasPrefix(self.name)
+                    })
                     if objectsForRemove.count > 0 {
                         realmDB.delete(objectsForRemove)
                     }
                 }
             } catch { }
-        }) 
+        }
     }
 
     /// Removes all expired objects from the cache.
     open func removeExpiredObjects() {
         // TODO: add realm
-        queue.sync(flags: .barrier, execute: {
+        DataSource.runDBOperation { realmDB in
             do {
                 try realmDB.write {
-                    let objectsForRemove: [CacheObject] = (try? realmDB.objects(CacheObject.self)
+                    let objectsForRemove: [CacheObject] = (realmDB.objects(CacheObject.self)
                                         .filter({ item -> Bool in
                                             (item.key.hasPrefix(self.name) && item.isExpired())
-                                        }) ) ?? []
+                                        }) )
                     if objectsForRemove.count > 0 {
                         realmDB.delete(objectsForRemove)
                     }
                 }
             } catch { }
-        }) 
+        }
     }
 
     // MARK: Subscripting
@@ -243,11 +293,10 @@ open class Cache<T: NSCoding> {
         // TODO: add realm
         let ckey = objKey(with: key)
         // Set object in local cache
-        cache.setObject(object, forKey: ckey as NSString)
 
         do {
             try realmDB.write {
-                let cacheObject = CacheObject(key: key, value: object, expiryDate: expiryDate)
+                let cacheObject = CacheObject(key: ckey, value: object, expiryDate: expiryDate)
                 realmDB.add(cacheObject, update: true)
             }
         } catch {
@@ -255,13 +304,13 @@ open class Cache<T: NSCoding> {
         }
     }
 
-    fileprivate func read(_ key: String) -> CacheObject? {
-        // TODO: add realm
-        let ckey = objKey(with: key)
-        let object: CacheObject? = realmDB.objects(CacheObject.self)
-            .first(where: { $0.key == ckey })
-        return object
-    }
+//    fileprivate func read(_ key: String) -> CacheObject? {
+//        // TODO: add realm
+//        let ckey = objKey(with: key)
+//        let object: CacheObject? = cache.object(forKey: ckey as NSString) ?? realmDB.objects(CacheObject.self)
+//            .first(where: { $0.key == ckey })
+//        return object
+//    }
 
     // Deletes an object from disk
     fileprivate func removeFromDisk(_ key: String) {

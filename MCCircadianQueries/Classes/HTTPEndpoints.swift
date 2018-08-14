@@ -18,7 +18,7 @@ import Foundation
 
 
 /// A default selection of HTTP status codes that will be interpreted as a successful upload.
-private let defaultSuccessCodes = Set([200, 201, 202, 204])
+public let defaultSuccessCodes = Set([200, 201, 202, 204])
 
 
 //MARK: Persisted Cache

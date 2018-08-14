@@ -41,6 +41,9 @@
 /// - parameter          deviceType: The type of the device running the application.
 /// - parameter      deviceVendorID: The vendor ID of the device running the application (if available).
 /// - parameter deviceAdvertisingID: The advertising ID of the device running the application (if available).
+
+import Foundation
+
 public struct LXLogEntry {
     
     /// The version of the LogKit framework that generated this Entry.

@@ -70,11 +70,12 @@ public func ==(lhs: CircadianEvent, rhs: CircadianEvent) -> Bool {
 }
 
 //@available(iOS 9.0, *)
-open class MCCircadianEventArray: NSObject, NSCoding {
+open class MCCircadianEventArray: NSObject, CachableObject {
     open var events : [(Date, CircadianEvent)]
 
     init(events: [(Date, CircadianEvent)]) {
         self.events = events
+        super.init()
     }
 
     required public convenience init?(coder aDecoder: NSCoder) {
@@ -92,6 +93,11 @@ open class MCCircadianEventArray: NSObject, NSCoding {
     open func encode(with aCoder: NSCoder) {
         aCoder.encode(events.map { return $0.0 }, forKey: "dates")
         aCoder.encode(events.map { return $0.1.toString() as NSString }, forKey: "events")
+    }
+    
+    override init() {
+        events = []
+        super.init()
     }
 }
 
@@ -272,13 +278,14 @@ open class MCSampleCoding: NSObject, NSCoding, MCSample {
     }
 }
 
-open class MCSampleArray: NSObject, NSCoding {
+open class MCSampleArray: NSObject, CachableObject {
     static let countKey = "count"
     static let samplesKey = "samples"
     open var samples: [MCSample]
 
     public init(samples: [MCSample]) {
         self.samples = samples
+        super.init()
     }
 
     required public convenience init?(coder aDecoder: NSCoder) {
@@ -288,6 +295,11 @@ open class MCSampleArray: NSObject, NSCoding {
 
     open func encode(with aCoder: NSCoder) {
         aCoder.encode(samples.map { MCSampleCoding(sample: $0) }, forKey: MCSampleArray.samplesKey)
+    }
+    
+    override init() {
+        samples = []
+        super.init()
     }
 }
 
@@ -504,7 +516,7 @@ public extension MCAggregateSample {
             
             aggregate = MCAggregateSample(startDate: startDate, endDate: endDate, numeralValue: numeralValue, hkType: hkType,
                                           aggOp: HKStatisticsOptions(rawValue: aggOp), runningAgg: runningAgg, runningCnt: runningCnt)
-            print("aggregate is: \(String(describing: aggregate)))")
+//            print("aggregate is: \(String(describing: aggregate)))")
             
             super.init()
         }
@@ -522,11 +534,12 @@ public extension MCAggregateSample {
 }
 
 //@available(iOS 9.0, *)
-public class MCAggregateArray: NSObject, NSCoding {
+public class MCAggregateArray: NSObject, CachableObject {
     open var aggregates : [MCAggregateSample]
 
     init(aggregates: [MCAggregateSample]) {
         self.aggregates = aggregates
+        super.init()
     }
 
     required public convenience init?(coder aDecoder: NSCoder) {
@@ -536,6 +549,11 @@ public class MCAggregateArray: NSObject, NSCoding {
 
     open func encode(with aCoder: NSCoder) {
         aCoder.encode(aggregates.map { return MCAggregateSample.encode($0) }, forKey: "aggregates")
+    }
+    
+    override init() {
+        aggregates = []
+        super.init()
     }
 }
 
@@ -549,42 +567,25 @@ public extension HKSampleType {
     var aggregationOptions: HKStatisticsOptions {
         switch self {
         case is HKCategoryType:
-            return (self as! HKCategoryType).aggregationOptions
+            return .discreteAverage
 
         case is HKCorrelationType:
-            return (self as! HKCorrelationType).aggregationOptions
+            return .discreteAverage
 
         case is HKWorkoutType:
-            return (self as! HKWorkoutType).aggregationOptions
+            return .cumulativeSum
 
         case is HKQuantityType:
-            return (self as! HKQuantityType).aggregationOptions
+            let quantity = self as! HKQuantityType
+            switch quantity.aggregationStyle {
+            case .discrete:
+                return .discreteAverage
+            case .cumulative:
+                return .cumulativeSum
+            }
 
         default:
             fatalError("Invalid aggregation overy \(self.identifier)")
-        }
-    }
-}
-
-public extension HKCategoryType {
-    override var aggregationOptions: HKStatisticsOptions { return .discreteAverage }
-}
-
-public extension HKCorrelationType {
-    override var aggregationOptions: HKStatisticsOptions { return .discreteAverage }
-}
-
-public extension HKWorkoutType {
-    override var aggregationOptions: HKStatisticsOptions { return .cumulativeSum }
-}
-
-public extension HKQuantityType {
-    override var aggregationOptions: HKStatisticsOptions {
-        switch aggregationStyle {
-        case .discrete:
-            return .discreteAverage
-        case .cumulative:
-            return .cumulativeSum
         }
     }
 }

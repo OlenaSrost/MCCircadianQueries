@@ -151,9 +151,9 @@ internal let LK_DEVICE_IDS: (vendor: String, advertising: String) = {
             let advertisingID = ""
         #else
             let adManager = ASIdentifierManager.shared()
-            let advertisingID = (adManager?.isAdvertisingTrackingEnabled)! ? adManager?.advertisingIdentifier.uuidString : ""
+            let advertisingID = (adManager?.isAdvertisingTrackingEnabled) == true ? adManager?.advertisingIdentifier.uuidString : ""
         #endif
-        return (vendorID, advertisingID!)
+        return (vendorID, advertisingID ?? "")
     #else
         return ("", "")
     #endif
@@ -176,7 +176,7 @@ internal extension FileManager {
         
         let dirPath = URL.deletingLastPathComponent().path
         let filePath = URL.path
-        guard dirPath.characters.count > 0 && filePath.characters.count > 0 else {
+        guard dirPath.count > 0 && filePath.count > 0 else {
             assertionFailure("Invalid path: \(URL.absoluteString)")
             throw NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL, userInfo: [NSURLErrorKey: URL])
         }
