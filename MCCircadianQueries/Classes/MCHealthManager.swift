@@ -302,7 +302,7 @@ open class MCHealthManager: NSObject {
             self.fetchMostRecentSample(type) { (samples, error) in
                 guard error == nil else {
                     //        log.error("Could not fetch recent samples for \(type.displayText): \(error!.localizedDescription)")
-                    let err = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error?.localizedDescription])
+                    let err = NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey : error?.localizedDescription ?? "Could not fetch recent samples for \(String(describing: type.displayText)): \(error!.localizedDescription)"])
                     failure(err)
                     return
                 }
@@ -320,13 +320,12 @@ open class MCHealthManager: NSObject {
             }
         }
 
-
-        let debugType = types[5]
-        var array = [HKSampleType]()
-        array.append(debugType)
-
-
-
+        if types.count > 5 {
+            let debugType = types[5]
+            var array = [HKSampleType]()
+            array.append(debugType)
+        }
+        
         types.forEach { (type) -> () in
             group.enter()
             let key = type.identifier
