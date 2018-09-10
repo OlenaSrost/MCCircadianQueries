@@ -1924,7 +1924,8 @@ open class MCHealthManager: NSObject {
     }
 
     public func invalidateCacheForUpdates(_ type: HKSampleType, added: [HKSample]? = nil) {
-        let cacheType = type.identifier == HKCorrelationTypeIdentifier.bloodPressure.rawValue ? HKQuantityTypeIdentifier.bloodPressureSystolic.rawValue : type.identifier
+        let corelationBloodPressure = HKCorrelationTypeIdentifier.bloodPressure.rawValue
+        let cacheType = (type.identifier == corelationBloodPressure) ? HKQuantityTypeIdentifier.bloodPressureSystolic.rawValue : type.identifier
         let cacheKeyPrefix = cacheType
         let expiredPeriods : [HealthManagerStatisticsRangeType] = [.week, .month, .year]
         var expiredKeys : [String]
@@ -1932,6 +1933,9 @@ open class MCHealthManager: NSObject {
         let minMaxKeys = expiredPeriods.map { self.getPeriodCacheKey(cacheKeyPrefix, aggOp: [.discreteMin, .discreteMax], period: $0) }
         let avgKeys = expiredPeriods.map { self.getPeriodCacheKey(cacheKeyPrefix, aggOp: .discreteAverage, period: $0) }
 
+        if (cacheType == HKQuantityTypeIdentifier.bloodPressureSystolic.rawValue) {
+            self.sampleCache.removeObject(forKey:  corelationBloodPressure)
+        }
         self.sampleCache.removeObject(forKey:type.identifier)
         if let task = anyMeasureNotifyTask { task.cancel() }
         anyMeasureNotifyTask = Async.background(after: notifyInterval) {
